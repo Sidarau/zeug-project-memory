@@ -78,4 +78,5 @@ jobs:
           $env:ZEUG_KEY = 'zlm_WRONGWRONGWRONGWRONGWRONGWRONGWRONGWRONGWRO'
           $failed = $false
           try { irm "$env:ZEUG_REPO_RAW/install.ps1" | iex } catch { $failed = $true }
-          if (-not $failed -and $?) { throw 'a wrong key passed the install check' }
+          if (-not $failed) { throw 'a wrong key passed the install check' }
+          $global:LASTEXITCODE = 0   # the expected failure of the helper's check is not the step's
