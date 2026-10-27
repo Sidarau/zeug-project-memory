@@ -1,0 +1,46 @@
+#!/bin/sh
+# zm: the Zeug Lab project memory helper. Reads ~/.config/zeug/<project>.env (written by install.sh) so the access
+# key never appears in a command line or a chat.
+#   zm [-p project] project | search "question" | recent | doc <id> | add "title" < text | projects
+set -eu
+
+dir="${ZEUG_CONFIG_DIR:-$HOME/.config/zeug}"
+project=""
+if [ "${1:-}" = "-p" ]; then project="${2:-}"; shift 2; fi
+cmd="${1:-help}"; [ $# -gt 0 ] && shift
+
+if [ "$cmd" = "projects" ]; then
+  ls "$dir" 2>/dev/null | sed -n 's/\.env$//p'
+  exit 0
+fi
+
+if [ -z "$project" ]; then
+  count=$(ls "$dir" 2>/dev/null | grep -c '\.env$' || true)
+  if [ "$count" = "1" ]; then project=$(ls "$dir" | sed -n 's/\.env$//p')
+  elif [ "$count" = "0" ]; then echo "No Zeug project is set up. Connect one from cmd.zeuglab.com (Project memory → Connect your AI)." >&2; exit 2
+  else echo "Several projects are set up; pick one with -p: $(ls "$dir" | sed -n 's/\.env$//p' | tr '\n' ' ')" >&2; exit 2
+  fi
+fi
+case "$project" in *[!a-z0-9-]*|"") echo "Bad project id: $project" >&2; exit 2;; esac
+[ -f "$dir/$project.env" ] || { echo "Project $project is not set up on this machine." >&2; exit 2; }
+# shellcheck disable=SC1090
+. "$dir/$project.env"
+api="${ZEUG_API:-https://cmd.zeuglab.com}"
+
+# The key goes to curl through a header file on stdin, never as an argument.
+call() { printf 'Authorization: Bearer %s\n' "$ZEUG_MEMORY_KEY" | curl -sS -H @- "$@"; echo; }
+
+case "$cmd" in
+  project) call "$api/api/agent/project" ;;
+  search)  [ $# -ge 1 ] || { echo 'usage: zm search "question"' >&2; exit 2; }
+           call -G "$api/api/agent/memory" --data-urlencode "q=$*" ;;
+  recent)  call "$api/api/agent/memory" ;;
+  doc)     [ $# -ge 1 ] || { echo 'usage: zm doc <document-id>' >&2; exit 2; }
+           case "$1" in *[!A-Za-z0-9_-]*) echo "Bad document id" >&2; exit 2;; esac
+           call "$api/api/agent/documents/$1" ;;
+  add)     [ $# -ge 1 ] || { echo 'usage: zm add "title" < note.txt' >&2; exit 2; }
+           # stdin carries the key header to curl, so the note goes through a private temporary file
+           note=$(mktemp); trap 'rm -f "$note"' EXIT; cat > "$note"
+           call "$api/api/agent/memory" --data-urlencode "title=$1" --data-urlencode "text@$note" ;;
+  *)       sed -n '2,4p' "$0" | sed 's/^# \{0,1\}//' ;;
+esac
