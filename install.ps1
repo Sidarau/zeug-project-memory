@@ -29,11 +29,17 @@
   $conf = if ($env:ZEUG_CONFIG_DIR) { $env:ZEUG_CONFIG_DIR } else { Join-Path $home_ '.config\zeug' }
   New-Item -ItemType Directory -Force -Path $conf | Out-Null
   $file = Join-Path $conf "$project.env"
-  # LF line endings and no BOM, so Git Bash and WSL can read the same file.
-  [IO.File]::WriteAllText($file, "ZEUG_PROJECT=$project`nZEUG_MEMORY_KEY=$key`nZEUG_API=$api`n", (New-Object Text.UTF8Encoding $false))
+  # Lock the file down while it is still empty, then write the key into it.
+  Set-Content -Path $file -Value '' -NoNewline
   if ($env:OS -eq 'Windows_NT') {
     icacls $file /inheritance:r /grant:r "${env:USERNAME}:(R,W)" | Out-Null
+    if ($LASTEXITCODE -ne 0) { Remove-Item -Force $file; throw "Could not restrict $file to your account." }
+  } else {
+    chmod 700 $conf
+    chmod 600 $file
   }
+  # LF line endings and no BOM, so Git Bash and WSL can read the same file.
+  [IO.File]::WriteAllText($file, "ZEUG_PROJECT=$project`nZEUG_MEMORY_KEY=$key`nZEUG_API=$api`n", (New-Object Text.UTF8Encoding $false))
   Write-Host "Saved your key for $project in $file"
 
   # A fresh PowerShell runs the check, so the execution policy of this session does not matter.

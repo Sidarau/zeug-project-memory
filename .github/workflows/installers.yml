@@ -52,6 +52,8 @@ jobs:
           irm "$env:ZEUG_REPO_RAW/install.ps1" | iex
           if (-not (Test-Path "$env:USERPROFILE\.claude\skills\zeug-project-memory\bin\zm.cmd")) { throw 'zm.cmd missing' }
           if (-not (Test-Path "$env:USERPROFILE\.config\zeug\zz-ci.env")) { throw 'key file missing' }
+          $acl = (icacls "$env:USERPROFILE\.config\zeug\zz-ci.env") -join "`n"
+          if ($acl -notmatch [regex]::Escape($env:USERNAME) -or $acl -match 'Everyone|BUILTIN\\Users|Authenticated Users') { throw "key file ACL too open: $acl" }
       - name: Use zm.cmd from cmd
         shell: cmd
         run: |
