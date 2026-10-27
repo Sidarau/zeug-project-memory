@@ -5,7 +5,7 @@
 # ~/.config/zeug/<project>.env, readable only by you. Re-running it updates the skill and replaces the key.
 set -eu
 
-repo="https://raw.githubusercontent.com/Sidarau/zeug-project-memory/main"
+repo="${ZEUG_REPO_RAW:-https://raw.githubusercontent.com/Sidarau/zeug-project-memory/main}"
 project="${ZEUG_PROJECT:-}"
 key="${ZEUG_KEY:-}"
 api="${ZEUG_API:-https://cmd.zeuglab.com}"
@@ -20,6 +20,8 @@ install_skill() {
   curl -fsSL "$repo/SKILL.md" -o "$dest/SKILL.md"
   curl -fsSL "$repo/bin/zm" -o "$dest/bin/zm"
   chmod 755 "$dest/bin/zm"
+  curl -fsSL "$repo/bin/zm.ps1" -o "$dest/bin/zm.ps1"   # for PowerShell on the same machine
+  curl -fsSL "$repo/bin/zm.cmd" -o "$dest/bin/zm.cmd"
   echo "Installed the skill in $dest"
 }
 

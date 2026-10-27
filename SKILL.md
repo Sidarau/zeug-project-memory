@@ -15,7 +15,7 @@ The helper `bin/zm` next to this file reads the user's access key from `~/.confi
 ~/.claude/skills/zeug-project-memory/bin/zm projects     # which projects are set up on this machine
 ```
 
-If no project is set up, ask the user to open their project on cmd.zeuglab.com, go to **Project memory → Connect your AI**, and run the command shown there. Never ask the user to paste the key into the chat.
+If no project is set up, ask the user to open their project on cmd.zeuglab.com, go to **Project memory → Connect your AI**, and run the command shown there (a PowerShell line on Windows, a terminal command on Mac and Linux). Never ask the user to paste the key into the chat.
 
 ## Commands
 
@@ -31,7 +31,7 @@ What was decided or learned, with names, dates and numbers.
 EOF
 ```
 
-`zm` is `~/.claude/skills/zeug-project-memory/bin/zm` (or the same path under `~/.codex/skills/`).
+`zm` is `~/.claude/skills/zeug-project-memory/bin/zm` (or the same path under `~/.codex/skills/`). On Windows, Claude Code's Bash (Git Bash) runs that same file; in PowerShell or cmd use `zm.cmd` next to it (`%USERPROFILE%\.claude\skills\zeug-project-memory\bin\zm.cmd`), and pipe note text into `zm.cmd add "title"`.
 
 ## How to work with it
 

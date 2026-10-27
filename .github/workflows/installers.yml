@@ -1,0 +1,81 @@
+# Runs both installers and the zm helpers on real Windows, macOS and Linux against tests/mock_cmd.py (a local
+# stand-in for cmd.zeuglab.com with one fake key). No real key or project is involved.
+name: installers
+on: [push, pull_request, workflow_dispatch]
+
+env:
+  ZEUG_PROJECT: zz-ci
+  ZEUG_KEY: zlm_TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT
+  ZEUG_API: http://127.0.0.1:8765
+  ZEUG_REPO_RAW: http://127.0.0.1:8765/repo
+
+jobs:
+  unix:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start the stand-in for cmd
+        run: |
+          python3 tests/mock_cmd.py . 8765 &
+          for i in $(seq 1 20); do curl -s -o /dev/null http://127.0.0.1:8765/repo/SKILL.md && break; sleep 0.5; done
+      - name: Install (as the cmd command does)
+        run: cat install.sh | sh
+      - name: Use zm
+        run: |
+          zm=~/.claude/skills/zeug-project-memory/bin/zm
+          test "$(stat -c %a ~/.config/zeug/zz-ci.env 2>/dev/null || stat -f %Lp ~/.config/zeug/zz-ci.env)" = 600
+          $zm projects | grep -qx zz-ci
+          $zm project | grep -q '"project"'
+          printf 'Pilot starts Monday; Ina owns the intake form & "quotes" survive.\n' | $zm add "CI note"
+          $zm search "intake form" | grep -q 'CI note'
+          $zm recent | grep -q 'CI note'
+          $zm doc nosuch | grep -q 'No such document'
+      - name: A wrong key fails the install check
+        run: |
+          if cat install.sh | ZEUG_KEY=zlm_WRONGWRONGWRONGWRONGWRONGWRONGWRONGWRONGWRO sh; then exit 1; fi
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start the stand-in for cmd
+        shell: pwsh
+        run: |
+          Start-Process python -ArgumentList 'tests/mock_cmd.py', '.', '8765' -WindowStyle Hidden
+          foreach ($i in 1..20) { try { Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8765/repo/SKILL.md | Out-Null; break } catch { Start-Sleep -Milliseconds 500 } }
+      - name: Install with Windows PowerShell 5.1 (as the cmd line does, irm | iex)
+        shell: powershell
+        run: |
+          irm "$env:ZEUG_REPO_RAW/install.ps1" | iex
+          if (-not (Test-Path "$env:USERPROFILE\.claude\skills\zeug-project-memory\bin\zm.cmd")) { throw 'zm.cmd missing' }
+          if (-not (Test-Path "$env:USERPROFILE\.config\zeug\zz-ci.env")) { throw 'key file missing' }
+      - name: Use zm.cmd from cmd
+        shell: cmd
+        run: |
+          set ZM=%USERPROFILE%\.claude\skills\zeug-project-memory\bin\zm.cmd
+          call "%ZM%" projects | findstr /x zz-ci || exit /b 1
+          call "%ZM%" project | findstr /c:zz-ci || exit /b 1
+          echo Pilot starts Monday; Ina owns the intake form and quotes survive.| "%ZM%" add "CI note" || exit /b 1
+          call "%ZM%" search "intake form" | findstr /c:"CI note" || exit /b 1
+      - name: Use zm.ps1 from PowerShell 7
+        shell: pwsh
+        run: |
+          $zm = "$env:USERPROFILE\.claude\skills\zeug-project-memory\bin\zm.cmd"
+          $out = (& $zm recent) -join "`n"
+          if ($out -notmatch 'CI note') { throw "recent: $out" }
+          'A second note from PowerShell, long enough to keep.' | & $zm add 'PS note'
+          if (((& $zm search 'second note') -join "`n") -notmatch 'PS note') { throw 'search after add failed' }
+      - name: The same key file works from Git Bash (Claude Code's shell on Windows)
+        shell: bash
+        run: |
+          ~/.claude/skills/zeug-project-memory/bin/zm search "intake form" | grep -q 'CI note'
+      - name: A wrong key fails the install check
+        shell: powershell
+        run: |
+          $env:ZEUG_KEY = 'zlm_WRONGWRONGWRONGWRONGWRONGWRONGWRONGWRONGWRO'
+          $failed = $false
+          try { irm "$env:ZEUG_REPO_RAW/install.ps1" | iex } catch { $failed = $true }
+          if (-not $failed -and $?) { throw 'a wrong key passed the install check' }
