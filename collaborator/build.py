@@ -8,7 +8,7 @@ if args.skill:
  import shutil
  shutil.copytree(source, out/'skill', dirs_exist_ok=True, ignore=shutil.ignore_patterns('scripts','__pycache__'))
 files={'setup.py':(source/'scripts/setup.py' if args.skill else out/'setup.py').read_text(encoding='utf-8')}
-for path in [source/'SKILL.md',*(source/'references').glob('*.md'),source/'agents/openai.yaml']:
+for path in [source/'SKILL.md',*sorted((source/'references').glob('*.md')),source/'agents/openai.yaml']:
  files['skill/'+path.relative_to(source).as_posix()]=path.read_text(encoding='utf-8')
 kit={'schemaVersion':1,'files':files,'sha256':{k:hashlib.sha256(v.encode()).hexdigest() for k,v in files.items()}}
 (out/'kit.json').write_text(json.dumps(kit,indent=2,ensure_ascii=False)+'\n',encoding='utf-8')
