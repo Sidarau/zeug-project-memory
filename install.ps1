@@ -32,6 +32,7 @@
       & $python.Source (Join-Path $tmp 'setup.py') init --kit (Join-Path $tmp 'kit.json') --profile (Join-Path $tmp 'project.json') --target $target
       if ($LASTEXITCODE -ne 0) { throw 'Project setup failed; existing files were preserved. Follow the error above.' }
     } finally { Remove-Item -Recurse -Force $tmp }
+    $env:ZEUG_KEY = $null
     Write-Host 'Project setup is ready. Your existing global skills and saved keys were not changed. Sign in with your own accounts.'
     return
   }

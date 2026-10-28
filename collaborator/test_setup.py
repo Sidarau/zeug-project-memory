@@ -7,7 +7,7 @@ class SetupTests(unittest.TestCase):
  def setUp(self):
   self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup);self.root=pathlib.Path(self.tmp.name)/'project';self.kit,self.rev=s.kit_of((ROOT/'kit.json').read_bytes())
  def install(self,**kw): return s.install(self.root,s.profile_of(copy.deepcopy(PROFILE)),self.kit,self.rev,**kw)
- def snapshot(self): return {p.relative_to(self.root).as_posix():p.read_bytes() for p in self.root.rglob('*') if p.is_file()}
+ def snapshot(self): return {p.relative_to(self.root).as_posix():p.read_bytes() for p in self.root.rglob('*') if p.is_file() and p.relative_to(self.root).as_posix() != '.zeug/setup.lock'}
  def test_new_and_repeat(self):
   self.install();before=self.snapshot();self.install();self.assertEqual(before,self.snapshot());self.assertIn('SMP',(self.root/'.zeug/LINEAR_SOP.md').read_text())
  def test_existing_files_preserved(self):
@@ -53,8 +53,24 @@ class SetupTests(unittest.TestCase):
   self.assertEqual(before,self.snapshot());s.install(self.root,PROFILE,k,rev)
  def test_interrupted_update_journal_recovers(self):
   self.install();before=self.snapshot();p=self.root/'AGENTS.md';old=p.read_bytes();p.write_bytes(b'incomplete new version')
-  (self.root/'.zeug/update-journal.json').write_bytes(s.encode({'AGENTS.md':{'data':base64.b64encode(old).decode(),'mode':0o600}}))
+  (self.root/'.zeug/update-journal.json').write_bytes(s.encode({'AGENTS.md':{'before':{'data':base64.b64encode(old).decode(),'mode':0o600},'afterHash':s.digest(b'incomplete new version')}}))
   self.install();self.assertEqual(before,self.snapshot())
+ def test_recovery_preserves_post_interruption_edits(self):
+  self.install();p=self.root/'AGENTS.md';old=p.read_bytes();p.write_bytes(b'New collaborator edit')
+  journal=self.root/'.zeug/update-journal.json';journal.write_bytes(s.encode({'AGENTS.md':{'before':{'data':base64.b64encode(old).decode(),'mode':0o600},'afterHash':s.digest(b'incomplete new version')}}))
+  before=self.snapshot()
+  with self.assertRaises(s.SetupError):self.install()
+  self.assertEqual(before,self.snapshot())
+ def test_dry_run_does_not_recover(self):
+  self.install();p=self.root/'AGENTS.md';old=p.read_bytes();p.write_bytes(b'incomplete new version')
+  (self.root/'.zeug/update-journal.json').write_bytes(s.encode({'AGENTS.md':{'before':{'data':base64.b64encode(old).decode(),'mode':0o600},'afterHash':s.digest(b'incomplete new version')}}))
+  before=self.snapshot()
+  with self.assertRaises(s.SetupError):self.install(dry_run=True)
+  self.assertEqual(before,self.snapshot())
+ def test_concurrent_update_refuses_second_writer(self):
+  self.install()
+  with s.transaction(self.root):
+   with self.assertRaises(s.SetupError):self.install()
  def test_unicode_in_profile_and_existing_instructions_survives(self):
   p=copy.deepcopy(PROFILE);p['name']='Café 合作';p['linear']['projects'][0]['name']='Révision'
   self.root.mkdir();(self.root/'AGENTS.md').write_text('Local café 中文\n',encoding='utf-8')

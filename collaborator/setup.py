@@ -2,6 +2,7 @@
 """Project-only installer/updater. Python 3.9+, standard library; no credentials."""
 import argparse
 import base64
+from contextlib import contextmanager
 import hashlib
 import json
 import os
@@ -140,8 +141,16 @@ def recover(root):
     entries = json.loads(journal.read_text(encoding='utf-8'))
     if not isinstance(entries, dict) or not all(recovery_path(r) for r in entries):
         raise SetupError('Invalid update recovery journal; inspect it before continuing')
-    # Restore an interrupted transaction before trusting the previous state receipt.
-    for rel, old in entries.items():
+    # Preserve anything edited after the interruption, including newly created or deleted files.
+    for rel, entry in entries.items():
+        old = entry['before']
+        dest = guarded(root, rel)
+        current = digest(dest.read_bytes()) if dest.exists() else None
+        before = digest(base64.b64decode(old['data'], validate=True)) if old else None
+        if current not in (before, entry['afterHash']):
+            raise SetupError('Recovery conflict; preserving post-interruption edits: ' + rel)
+    for rel, entry in entries.items():
+        old = entry['before']
         dest = guarded(root, rel)
         if old is None:
             if dest.exists():
@@ -149,6 +158,49 @@ def recover(root):
         else:
             write_atomic(dest, base64.b64decode(old['data'], validate=True), old['mode'])
     journal.unlink()
+
+
+@contextmanager
+def transaction(root, dry_run=False):
+    root = Path(root).expanduser().absolute()
+    if root.is_symlink():
+        raise SetupError('Choose a real project directory, not a symlink')
+    root = root.resolve()
+    journal = guarded(root, '.zeug/update-journal.json')
+    if dry_run:
+        if journal.exists():
+            raise SetupError('An interrupted update needs recovery; dry run made no changes. Run refresh without --dry-run.')
+        yield root
+        return
+    lock = guarded(root, '.zeug/setup.lock')
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(lock, os.O_CREAT | os.O_RDWR, 0o600)
+    try:
+        if os.fstat(fd).st_size == 0:
+            os.write(fd, b'0')
+        os.lseek(fd, 0, os.SEEK_SET)
+        try:
+            if os.name == 'nt':
+                import msvcrt
+                msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            raise SetupError('Another setup/update is running in this project; retry after it finishes')
+        try:
+            recover(root)
+            yield root
+        finally:
+            if os.name == 'nt':
+                import msvcrt
+                os.lseek(fd, 0, os.SEEK_SET)
+                msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(fd, fcntl.LOCK_UN)
+    finally:
+        os.close(fd)
 
 
 def block_merge(current, new, begin, end, expected):
@@ -166,11 +218,11 @@ def block_merge(current, new, begin, end, expected):
 
 
 def install(root, profile, kit, revision, dry_run=False):
-    root = Path(root).expanduser().absolute()
-    if root.is_symlink():
-        raise SetupError('Choose a real project directory, not a symlink')
-    root = root.resolve()
-    recover(root)
+    with transaction(root, dry_run) as target:
+        return install_locked(target, profile, kit, revision, dry_run)
+
+
+def install_locked(root, profile, kit, revision, dry_run=False):
     state_path = guarded(root, '.zeug/installed.json')
     state = json.loads(state_path.read_text(encoding='utf-8')) if state_path.exists() else {}
     if state and state.get('schemaVersion') != 1:
@@ -243,11 +295,11 @@ def install(root, profile, kit, revision, dry_run=False):
         changes = {rel: data for rel, data in planned.items() if not destinations[rel].exists() or destinations[rel].read_bytes() != data}
         if changes:
             journal = guarded(root, '.zeug/update-journal.json')
-            backups = {rel: {'data': base64.b64encode(destinations[rel].read_bytes()).decode(), 'mode': destinations[rel].stat().st_mode & 0o777} if destinations[rel].exists() else None for rel in changes}
+            backups = {rel: {'before': {'data': base64.b64encode(destinations[rel].read_bytes()).decode(), 'mode': destinations[rel].stat().st_mode & 0o777} if destinations[rel].exists() else None, 'afterHash': digest(data)} for rel, data in changes.items()}
             write_atomic(journal, encode(backups))
             try:
                 for rel, data in changes.items():
-                    old = backups[rel]
+                    old = backups[rel]['before']
                     write_atomic(destinations[rel], data, old['mode'] if old else 0o600)
                 journal.unlink()
             except BaseException:
@@ -265,14 +317,11 @@ def main():
     parser.add_argument('--dry-run', action='store_true')
     args = parser.parse_args()
     try:
-        root = Path(args.target).expanduser().absolute()
-        if root.is_symlink():
-            raise SetupError('Choose a real project directory, not a symlink')
-        recover(root.resolve())
-        source = Path(args.profile) if args.profile else Path(args.target) / '.zeug/project.json'
-        profile = profile_of(json.loads(source.read_text(encoding='utf-8')))
-        kit, revision = fetch_kit(args.kit)
-        print(json.dumps(install(args.target, profile, kit, revision, args.dry_run)))
+        with transaction(args.target, args.dry_run) as root:
+            source = Path(args.profile) if args.profile else root / '.zeug/project.json'
+            profile = profile_of(json.loads(source.read_text(encoding='utf-8')))
+            kit, revision = fetch_kit(args.kit)
+            print(json.dumps(install_locked(root, profile, kit, revision, args.dry_run)))
         if args.action == 'init':
             print('Project files ready. Open this directory in Codex or Claude Code and approve your own connector sign-ins.')
             print('Codex: codex mcp login linear-' + profile['project'] + '; codex mcp login zeug-' + profile['project'])
