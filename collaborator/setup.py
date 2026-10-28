@@ -81,7 +81,7 @@ def kit_of(raw):
     if not required.issubset(k['files']):
         raise SetupError('Incomplete kit')
     for name, value in k['files'].items():
-        if name not in required and name != 'skill/agents/openai.yaml':
+        if name not in required and name != 'skill/agents/openai.yaml' and not re.fullmatch(r'skill/references/[a-z0-9-]{1,64}\.md', name):
             raise SetupError('Unexpected kit path: ' + name)
         if not isinstance(value, str) or digest(value.encode()) != k['sha256'][name]:
             raise SetupError('Kit checksum mismatch: ' + name)
@@ -131,7 +131,7 @@ def write_atomic(dest, data, mode=0o600):
 def recovery_path(rel):
     fixed = {'AGENTS.md', 'CLAUDE.md', '.mcp.json', '.codex/config.toml', '.zeug/setup.py', '.zeug/project.json', '.zeug/PROJECT.md', '.zeug/LINEAR_SOP.md', '.zeug/installed.json'}
     suffixes = {'SKILL.md', 'agents/openai.yaml', 'references/linear.md', 'references/memory.md', 'references/documents.md', 'references/updates.md'}
-    return rel in fixed or any(rel == p + s for p in ('.agents/skills/zeug-collaborate/', '.claude/skills/zeug-collaborate/') for s in suffixes)
+    return rel in fixed or any(rel == p + s for p in ('.agents/skills/zeug-collaborate/', '.claude/skills/zeug-collaborate/') for s in suffixes) or bool(re.fullmatch(r'\.(agents|claude)/skills/zeug-collaborate/references/[a-z0-9-]{1,64}\.md', rel))
 
 
 def recover(root):

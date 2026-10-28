@@ -76,6 +76,9 @@ class SetupTests(unittest.TestCase):
   self.root.mkdir();(self.root/'AGENTS.md').write_text('Local café 中文\n',encoding='utf-8')
   s.install(self.root,p,self.kit,self.rev);s.install(self.root,p,self.kit,self.rev)
   self.assertIn('Local café 中文',(self.root/'AGENTS.md').read_text(encoding='utf-8'));self.assertIn('Café 合作',(self.root/'.zeug/PROJECT.md').read_text(encoding='utf-8'))
+ def test_new_sop_is_distributed_on_refresh(self):
+  self.install();k=copy.deepcopy(self.kit);k['files']['skill/references/new-workflow.md']='A newly published workflow.';k['sha256']['skill/references/new-workflow.md']=s.digest(b'A newly published workflow.');k,rev=s.kit_of(s.encode(k));s.install(self.root,PROFILE,k,rev)
+  self.assertEqual((self.root/'.agents/skills/zeug-collaborate/references/new-workflow.md').read_text(),'A newly published workflow.')
  def test_dry_run_creates_nothing(self):self.install(dry_run=True);self.assertFalse(self.root.exists())
  def test_config_is_credential_free(self):
   self.install();alltext='\n'.join(b.decode() for b in self.snapshot().values());self.assertNotIn('Bearer ',alltext);self.assertNotIn('api_key',alltext.lower())

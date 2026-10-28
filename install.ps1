@@ -19,10 +19,9 @@
     $tmp = Join-Path ([IO.Path]::GetTempPath()) ([guid]::NewGuid().ToString())
     New-Item -ItemType Directory -Path $tmp | Out-Null
     try {
-      $profile = Invoke-RestMethod -Uri "$api/api/agent/setup" -Headers @{ Authorization = "Bearer $key" }
-      [IO.File]::WriteAllText((Join-Path $tmp 'project.json'), ($profile | ConvertTo-Json -Depth 10), (New-Object Text.UTF8Encoding $false))
+      Invoke-WebRequest -UseBasicParsing -Uri "$api/api/agent/setup" -Headers @{ Authorization = "Bearer $key" } -OutFile (Join-Path $tmp 'project.json')
       Invoke-WebRequest -UseBasicParsing -Uri "$repo/collaborator/kit.json" -OutFile (Join-Path $tmp 'kit.json')
-      $kit = Get-Content -Raw (Join-Path $tmp 'kit.json') | ConvertFrom-Json
+      $kit = Get-Content -Raw -Encoding UTF8 (Join-Path $tmp 'kit.json') | ConvertFrom-Json
       $script = [string]$kit.files.'setup.py'
       $sha = [Security.Cryptography.SHA256]::Create()
       $hash = -join ($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($script)) | ForEach-Object { $_.ToString('x2') })
