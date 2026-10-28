@@ -12,8 +12,8 @@ class InstallerTest(unittest.TestCase):
      try:urllib.request.urlopen(api+'/repo/SKILL.md',timeout=1).close();break
      except OSError:time.sleep(.1)
     (tmp/'home/.claude/skills/zeug-project-memory').mkdir(parents=True);(tmp/'home/.claude/skills/zeug-project-memory/SKILL.md').write_text('Existing customized global skill')
-   (tmp/'conf').mkdir();(tmp/'conf/zz-ci.env').write_text('Existing private key record')
-   env=dict(os.environ,ZEUG_INSTALL_HOME=str(tmp/'home'),ZEUG_CONFIG_DIR=str(tmp/'conf'),ZEUG_API=api,ZEUG_REPO_RAW=api+'/repo',ZEUG_PROJECT='zz-ci',ZEUG_KEY='zlm_'+'T'*43,ZEUG_PROJECT_SETUP='1',ZEUG_PROJECT_DIR=str(tmp/'project'))
+    (tmp/'conf').mkdir();(tmp/'conf/zz-ci.env').write_text('Existing private key record')
+    env=dict(os.environ,ZEUG_INSTALL_HOME=str(tmp/'home'),ZEUG_CONFIG_DIR=str(tmp/'conf'),ZEUG_API=api,ZEUG_REPO_RAW=api+'/repo',ZEUG_PROJECT='zz-ci',ZEUG_KEY='zlm_'+'T'*43,ZEUG_PROJECT_SETUP='1',ZEUG_PROJECT_DIR=str(tmp/'project'))
     result=subprocess.run(['sh',str(ROOT/'install.sh')],env=env,cwd=tmp,capture_output=True,text=True)
     self.assertEqual(result.returncode,0,result.stderr)
     self.assertTrue((tmp/'project/AGENTS.md').exists());self.assertTrue((tmp/'project/CLAUDE.md').exists())
