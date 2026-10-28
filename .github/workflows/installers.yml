@@ -17,6 +17,11 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      - name: Test collaborator setup and generated kit
+        run: |
+          python3 -m unittest discover -s collaborator -p "test_*.py"
+          python3 collaborator/build.py
+          git diff --exit-code -- collaborator/kit.json collaborator/setup.py
       - name: Start the stand-in for cmd
         run: |
           python3 tests/mock_cmd.py . 8765 &
@@ -33,6 +38,13 @@ jobs:
           $zm search "intake form" | grep -q 'CI note'
           $zm recent | grep -q 'CI note'
           $zm doc nosuch | grep -q 'No such document'
+      - name: Full project setup (no shared credentials in project)
+        run: |
+          cat install.sh | ZEUG_PROJECT_SETUP=1 sh
+          test -f zz-ci/AGENTS.md
+          test -f zz-ci/CLAUDE.md
+          test -f zz-ci/.zeug/project.json
+          python3 zz-ci/.zeug/setup.py refresh --target zz-ci --kit collaborator/kit.json
       - name: A wrong key fails the install check
         run: |
           if cat install.sh | ZEUG_KEY=zlm_WRONGWRONGWRONGWRONGWRONGWRONGWRONGWRONGWRO sh; then exit 1; fi
@@ -74,6 +86,15 @@ jobs:
         shell: bash
         run: |
           ~/.claude/skills/zeug-project-memory/bin/zm search "intake form" | grep -q 'CI note'
+      - name: Full project setup on Windows
+        shell: powershell
+        run: |
+          $env:ZEUG_PROJECT_SETUP = '1'
+          irm "$env:ZEUG_REPO_RAW/install.ps1" | iex
+          if (-not (Test-Path 'zz-ci/AGENTS.md')) { throw 'project instructions missing' }
+          python zz-ci/.zeug/setup.py refresh --target zz-ci --kit collaborator/kit.json
+          if ($LASTEXITCODE -ne 0) { throw 'refresh failed' }
+          $env:ZEUG_PROJECT_SETUP = '0'
       - name: A wrong key fails the install check
         shell: powershell
         run: |

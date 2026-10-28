@@ -12,6 +12,31 @@
   if ($key -notmatch '^zlm_[A-Za-z0-9_-]{43}$') { throw 'ZEUG_KEY is missing. Copy the line again from cmd.zeuglab.com.' }
   [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 
+  if ($env:ZEUG_PROJECT_SETUP -eq '1') {
+    $python = Get-Command python -ErrorAction SilentlyContinue
+    if (-not $python) { $python = Get-Command python3 -ErrorAction SilentlyContinue }
+    if (-not $python) { throw 'Project setup requires Python 3.9 or newer; use the project download after installing Python.' }
+    $tmp = Join-Path ([IO.Path]::GetTempPath()) ([guid]::NewGuid().ToString())
+    New-Item -ItemType Directory -Path $tmp | Out-Null
+    try {
+      Invoke-WebRequest -UseBasicParsing -Uri "$api/api/agent/setup" -Headers @{ Authorization = "Bearer $key" } -OutFile (Join-Path $tmp 'project.json')
+      Invoke-WebRequest -UseBasicParsing -Uri "$repo/collaborator/kit.json" -OutFile (Join-Path $tmp 'kit.json')
+      $kit = Get-Content -Raw -Encoding UTF8 (Join-Path $tmp 'kit.json') | ConvertFrom-Json
+      $script = [string]$kit.files.'setup.py'
+      $sha = [Security.Cryptography.SHA256]::Create()
+      $hash = -join ($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($script)) | ForEach-Object { $_.ToString('x2') })
+      if ($hash -ne $kit.sha256.'setup.py') { throw 'Invalid setup checksum' }
+      [IO.File]::WriteAllText((Join-Path $tmp 'setup.py'), $script, (New-Object Text.UTF8Encoding $false))
+      $target = if ($env:ZEUG_PROJECT_DIR) { $env:ZEUG_PROJECT_DIR } else { Join-Path $PWD $project }
+      & $python.Source (Join-Path $tmp 'setup.py') init --kit (Join-Path $tmp 'kit.json') --profile (Join-Path $tmp 'project.json') --target $target
+      if ($LASTEXITCODE -ne 0) { throw 'Project setup failed; existing files were preserved. Follow the error above.' }
+    } finally { Remove-Item -Recurse -Force $tmp }
+    $env:ZEUG_KEY = $null
+    Write-Host 'Project setup is ready. Your existing global skills and saved keys were not changed. Sign in with your own accounts.'
+    return
+  }
+
+
   function Install-Skill([string]$root) {
     $dest = Join-Path $root 'zeug-project-memory'
     $bin = Join-Path $dest 'bin'
@@ -52,4 +77,5 @@
   } else {
     Write-Error "Installed, but the test call failed. Check the key on cmd.zeuglab.com and run the line again."
   }
+
 }
