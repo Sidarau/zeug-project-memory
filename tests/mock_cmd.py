@@ -37,6 +37,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self.send(200, f.read(), "text/plain")
         if self.headers.get("Authorization") != KEY:
             return self.send(401, {"error": "Missing, revoked or unknown access key."})
+        if url.path == "/api/agent/setup":
+            return self.send(200, {"schemaVersion": 1, "project": "zz-ci", "name": "CI project", "memoryUrl": "https://mcp.zeuglab.com/w/zz-ci", "linear": {"workspaceSlug": "sample-workspace", "organizationId": "11111111-1111-4111-8111-111111111111", "teamId": "22222222-2222-4222-8222-222222222222", "teamKey": "SMP", "projects": [{"id": "33333333-3333-4333-8333-333333333333", "name": "Sample project"}]}})
         if url.path == "/api/agent/project":
             return self.send(200, {"project": "zz-ci", "name": "CI", "memory": {"enabled": True, "notes": len(NOTES)},
                                    "documents": [], "drops": []})

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Zeug Collaborate"
+  short_description: "Project setup, Linear SOPs and shared memory"
+  default_prompt: "Use $zeug-collaborate to check this project's setup and resume its tracked work."
